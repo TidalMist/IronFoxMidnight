@@ -9,7 +9,7 @@ APK_URL=$(echo "$LATEST_RELEASE" | jq -r '.assets.links[] | select(.name | endsw
 wget -q "$APK_URL" -O latest.apk
 
 # Download build tools
-wget -q https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_2.11.1.jar -O apktool.jar
+wget -q https://bitbucket.org/iBotPeaches/apktool/downloads/apktool_2.12.0.jar -O apktool.jar
 wget -q https://raw.githubusercontent.com/iBotPeaches/Apktool/master/scripts/linux/apktool
 chmod +x apktool*
 

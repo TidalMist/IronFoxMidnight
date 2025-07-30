@@ -10,10 +10,10 @@ jobs:
       matrix:
         variant: [armeabi-v7a, arm64-v8a, x86_64]
     steps:
-      - name: Install dependencies
+      - name: Install jq
         run: |
           sudo apt update
-          sudo apt install -y jq wget zipalign apksigner
+          sudo apt install -y jq
       
       - name: Get latest IronFox version
         id: version
@@ -27,47 +27,45 @@ jobs:
           echo "EOF" >> $GITHUB_ENV
           echo "APK_NAME=IronFox-${VERSION}-${{ matrix.variant }}.apk" >> $GITHUB_ENV
           echo "APK_URL=$(echo "$LATEST_RELEASE" | jq -r '.assets.links[] | select(.name | endswith("'"-${{ matrix.variant }}.apk"'")) | .url')" >> $GITHUB_ENV
+  
+      - name: Get latest release info
+        id: getLatest
+        uses: cardinalby/git-get-release-action@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          latest: true
+
+      - name: Check if latest version was already built
+        id: check-release
+        if: ${{ steps.getLatest.outputs.tag_name == env.BUILD_VERSION }}
+        run: |
+          echo "${{ env.BUILD_VERSION }} already released"
+          echo "skip=true" >> $GITHUB_OUTPUT
+
+      - name: Install dependencies
+        if: steps.check-release.outputs.skip != 'true'
+        run: |
+          sudo apt install -y wget zipalign apksigner
       
       - name: Download APK
+        if: steps.check-release.outputs.skip != 'true'
         run: |
           wget "${{ env.APK_URL }}" -O latest.apk
-      
-      - name: Check existing release
-        id: check-release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        continue-on-error: true
-        run: |
-          gh release view "${{ env.BUILD_VERSION }}" --json assets --jq '.assets[].name' | grep -q "${{ env.APK_NAME }}" && echo "skip=true" >> $GITHUB_OUTPUT
-      
-      - name: Skip if already built
-        if: steps.check-release.outputs.skip == 'true'
-        run: |
-          echo "Version ${{ env.BUILD_VERSION }} already released"
-          exit 0
       
       - name: Check out repository code
         uses: actions/checkout@v4
       
       - name: Run build script
+        if: steps.check-release.outputs.skip != 'true'
         run: |
           cd ${{ github.workspace }}
           chmod +x ./build.sh
           ./build.sh ${{ matrix.variant }}
-      
-      - name: Sign APK
-        run: |
-          echo "${{ secrets.KEYSTORE }}" | base64 -d > ironfox.jks
-          apksigner sign \
-            --ks ironfox.jks \
-            --ks-pass pass:"${{ secrets.KEYSTORE_PASSWORD }}" \
-            --key-pass pass:"${{ secrets.KEY_PASSWORD }}" \
-            --ks-key-alias "${{ secrets.KEY_ALIAS }}" \
-            --out signed.apk \
-            patched_signed.apk
-          mv signed.apk ${{ env.APK_NAME }}
+          mv patched_signed.apk ${{ env.APK_NAME }}
       
       - name: Publish release
+        if: steps.check-release.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.BUILD_VERSION }}
